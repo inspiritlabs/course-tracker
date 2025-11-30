@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olin E:C Tracker // White Glass</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.6)',
+                        glassBorder: 'rgba(255, 255, 255, 0.4)',
+                        glassHover: 'rgba(255, 255, 255, 0.8)',
+                        engr: '#3b82f6', // Blue 500
+                        mth: '#a855f7',  // Purple 500
+                        sci: '#10b981',  // Emerald 500
+                        ahs: '#f97316',  // Orange 500
+                        ent: '#ec4899',  // Pink 500
+                        other: '#64748b' // Slate 500
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
+
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+        }
+
+        .glass-drawer {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 10px 0 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .glass-input {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            color: #0f172a;
+            transition: all 0.3s ease;
+        }
+        .glass-input:focus {
+            outline: none;
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+
+        /* Grid Animations */
+        .grid-cell {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            background-color: #e2e8f0;
+            border-radius: 1rem;
+            overflow: hidden; /* For partial fills */
+        }
+        .grid-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .grid-cell-fill {
+            height: 100%;
+            width: 0%; /* Animate width for liquid fill */
+            transition: width 0.5s ease;
+        }
+
+        /* Footer Dot Animations */
+        .req-dot { transition: all 0.4s ease; }
+        .req-dot.active {
+            background-color: #10b981;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+            border-color: #10b981;
+        }
+        
+        /* Tooltip */
+        .has-tooltip:hover .tooltip {
+            visibility: visible; opacity: 1;
+            transform: translateY(-10px) translateX(-50%);
+        }
+        
+        /* Layout */
+        #grid-layer {
+            position: absolute; inset: 0; z-index: 0; padding: 2rem;
+            display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(10, 1fr); gap: 1rem;
+        }
+        
+        #ui-layer {
+            position: relative; z-index: 20; height: 100%; width: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+        }
+
+        .interactive { pointer-events: auto; }
+
+        /* Sidebar Transition */
+        #main-sidebar { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        #main-sidebar.open { transform: translateX(0); }
+        #main-sidebar.closed { transform: translateX(-100%); }
+    </style>
+</head>
+<body>
+
+    <!-- LAYER 1: The Massive Background Grid -->
+    <div id="grid-layer">
+        <!-- JS will populate 120 cells here -->
+    </div>
+
+    <!-- LAYER 2: The Floating UI -->
+    <div id="ui-layer">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center px-6 py-4 glass-panel rounded-2xl interactive mt-4 mx-4 shadow-sm z-30">
+            <h1 class="text-2xl font-light tracking-widest text-slate-500">OLIN <span class="font-bold text-slate-800">E:C</span></h1>
+            
+            <!-- Mini Stats Summary -->
+            <div class="flex gap-6 text-sm font-mono text-slate-600 font-medium">
+                <span class="flex items-center gap-2" title="Target: 46"><div class="w-3 h-3 rounded-full bg-engr"></div> ENGR <span id="stat-engr">0</span>/46</span>
+                <span class="flex items-center gap-2" title="Target: 30 Combined (Min 10 Math)"><div class="w-3 h-3 rounded-full bg-mth"></div> MTH+SCI <span id="stat-mthsci">0</span>/30</span>
+                <span class="flex items-center gap-2" title="Target: 28 Combined"><div class="w-3 h-3 rounded-full bg-ahs"></div> AHS+ENT <span id="stat-ahsent">0</span>/28</span>
+                <span class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-slate-300"></div> TOT <span id="stat-total">0</span>/120</span>
+            </div>
+        </header>
+
+        <!-- Hidden Slide-out Sidebar -->
+        <aside id="main-sidebar" class="fixed top-0 left-0 h-full w-[400px] z-50 glass-drawer flex flex-col p-6 closed interactive shadow-2xl">
+            
+            <!-- Sidebar Header -->
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold text-slate-800 tracking-tight">Manage Courses</h2>
+                <button onclick="toggleSidebar()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Add Course Panel -->
+            <div class="flex flex-col gap-4 mb-6">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-bold">New Entry</span>
+                    <button onclick="toggleMode()" class="text-xs text-blue-500 hover:text-blue-700 transition-colors font-medium"><i class="fas fa-terminal"></i> Switch Input Mode</button>
+                </div>
+
+                <!-- Single Entry Form -->
+                <div id="single-entry-form" class="flex flex-col gap-3">
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="text" id="course-code" placeholder="Code" class="glass-input col-span-1 rounded-xl px-3 py-2 text-sm font-mono placeholder-slate-400">
+                        <input type="text" id="course-name" placeholder="Course Name" class="glass-input col-span-2 rounded-xl px-3 py-2 text-sm placeholder-slate-400">
+                    </div>
+                    
+                    <div id="credit-rows" class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                        <!-- Dynamic rows appear here -->
+                    </div>
+
+                    <div class="flex gap-2 mt-1">
+                        <button onclick="addCreditRow()" class="flex-1 py-1.5 rounded-xl border border-dashed border-slate-300 text-xs text-slate-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all font-medium">+ Split Credits</button>
+                    </div>
+
+                    <button onclick="submitCourse()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all shadow-md mt-1">
+                        Add to Grid
+                    </button>
+                </div>
+
+                <!-- Batch Entry Form -->
+                <div id="batch-entry-form" class="hidden flex flex-col gap-3">
+                    <textarea id="json-input" placeholder='[{"code":"ENGR1200", "credits":[{"type":"ENGR", "amount":4}]}]' class="glass-input w-full h-32 rounded-xl p-3 text-xs font-mono resize-none"></textarea>
+                    <button onclick="submitBatch()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all">Process Batch</button>
+                </div>
+            </div>
+
+            <hr class="border-slate-200 mb-6">
+
+            <!-- Course List -->
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <h2 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-4">Transcript</h2>
+                <div id="course-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                    <!-- Added courses go here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Toggle Button for Sidebar -->
+        <button onclick="toggleSidebar()" class="fixed bottom-8 left-8 z-40 w-14 h-14 rounded-full bg-slate-800 text-white flex items-center justify-center shadow-xl hover:scale-110 hover:bg-blue-600 transition-all interactive group">
+            <i class="fas fa-pen text-xl group-hover:rotate-12 transition-transform"></i>
+        </button>
+
+        <!-- Spacer -->
+        <main class="flex-1 pointer-events-none"></main>
+
+        <!-- Footer: The Requirements Dock -->
+        <footer class="h-24 shrink-0 flex items-center justify-center interactive pb-4 z-30">
+            <div class="glass-panel px-8 h-16 rounded-full flex items-center gap-6 relative shadow-xl" id="req-dock">
+                <!-- Requirement Dots generated here -->
+                <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-slate-400 pointer-events-none font-medium">
+                    Hover to identify • Green indicates complete
+                </div>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Templates & Logic -->
+    <script>
+        // --- State Management ---
+        let courses = [];
+        const TOTAL_CREDITS = 120;
+        
+        // --- Logic Helpers ---
+        function getCreditsOfType(course, type) {
+            const c = course.credits.find(c => c.type === type);
+            return c ? c.amount : 0;
+        }
+
+        // --- Configuration ---
+        const requirementRules = [
+            // General Foundation
+            { 
+                id: 'found_des', 
+                name: 'Design Foundation (ENGR1200 + 2250)', 
+                check: (courses) => {
+                    const codes = courses.map(c => c.code);
+                    return codes.includes('ENGR1200') && codes.includes('ENGR2250');
+                }
+            },
+            { 
+                id: 'found_engr', 
+                name: 'Engineering Foundation (ENGR1125 + 2110)', 
+                check: (courses) => {
+                    const codes = courses.map(c => c.code);
+                    return codes.includes('ENGR1125') && codes.includes('ENGR2110');
+                }
+            },
+            { 
+                id: 'found_sci_bio', 
+                name: 'Biology Foundation (Approved SCI)', 
+                check: (courses) => {
+                    return courses.some(c => 
+                        (c.code.startsWith('SCI12') || c.name.toLowerCase().includes('biology')) && 
+                        getCreditsOfType(c, 'SCI') >= 4
+                    );
+                }
+            },
+            { 
+                id: 'found_sci_chem', 
+                name: 'Chem/MatSci Foundation (Approved SCI)', 
+                check: (courses) => {
+                    return courses.some(c => 
+                        (c.code.startsWith('SCI13') || c.code.startsWith('SCI14') || c.name.toLowerCase().includes('chemistry') || c.name.toLowerCase().includes('materials')) &&
+                        getCreditsOfType(c, 'SCI') >= 4
+                    );
+                }
+            },
+            { 
+                id: 'found_phys', 
+                name: 'Physics (ENGX2000 + 2006)', 
+                check: (courses) => {
+                    const codes = courses.map(c => c.code);
+                    return codes.includes('ENGX2000') && codes.includes('ENGX2006');
+                }
+            },
+            {
+                id: 'found_prob',
+                name: 'Probability & Stats (MTH213x)',
+                check: (courses) => {
+                    return courses.some(c => c.code.startsWith('MTH213') && getCreditsOfType(c, 'MTH') >= 2);
+                }
+            },
+            { 
+                id: 'found_ahs', 
+                name: 'AHS Foundation (AHSE1515 + 1 Other)', 
+                check: (courses) => {
+                    const has1515 = courses.some(c => c.code === 'AHSE1515');
+                    const ahsCredits = courses.reduce((sum, c) => sum + getCreditsOfType(c, 'AHS'), 0);
+                    return has1515 && ahsCredits >= 8;
+                }
+            },
+            // E:C Requirements
+            { 
+                id: 'ec_math', 
+                name: 'E:C Math (Discrete MTH2110)', 
+                check: (courses) => courses.some(c => c.code === 'MTH2110') 
+            },
+            { 
+                id: 'ec_softdes', 
+                name: 'Software Design (ENGR2510)', 
+                check: (courses) => courses.some(c => c.code === 'ENGR2510' && getCreditsOfType(c, 'ENGR') > 0) 
+            },
+            { 
+                id: 'ec_softsys', 
+                name: 'Software Systems (ENGR3525)', 
+                check: (courses) => courses.some(c => c.code === 'ENGR3525' && getCreditsOfType(c, 'ENGR') > 0) 
+            },
+            { 
+                id: 'ec_theory', 
+                name: 'Theory (DSA or FoCS)', 
+                check: (courses) => courses.some(c => (c.code === 'ENGR3515' || c.code === 'ENGR3520') && getCreditsOfType(c, 'ENGR') > 0)
+            },
+            {
+                id: 'ec_electives',
+                name: 'E:C Electives (8 credits)',
+                check: (courses) => {
+                    const ecElectives = ['ENGR3220', 'ENGR3410', 'ENGR3531', 'ENGR3540', 'ENGR3599']; 
+                    let credits = 0;
+                    courses.forEach(c => {
+                        if (ecElectives.includes(c.code) || (c.code.startsWith('ENGR35') && c.code !== 'ENGR3525' && c.code !== 'ENGR3515' && c.code !== 'ENGR3520')) {
+                            credits += getCreditsOfType(c, 'ENGR');
+                        }
+                    });
+                    return credits >= 8;
+                }
+            },
+            {
+                id: 'depth',
+                name: 'Design Depth (ENGR32xx)',
+                check: (courses) => courses.some(c => c.code.startsWith('ENGR32') && getCreditsOfType(c, 'ENGR') >= 4)
+            },
+            { 
+                id: 'capstone', 
+                name: 'Capstone (SCOPE/ADE - 8cr)', 
+                check: (courses) => {
+                    let capCredits = 0;
+                    courses.forEach(c => {
+                        if (c.code === 'ENGR4190' || c.code === 'ENGR4290') {
+                            capCredits += getCreditsOfType(c, 'ENGR');
+                        }
+                    });
+                    return capCredits >= 8;
+                } 
+            },
+        ];
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initGrid();
+            initReqDock();
+            loadData(); // Load Data AND UI State
+            
+            // If empty (first visit), add defaults
+            if (courses.length === 0) {
+                addCreditRow(); 
+            } else {
+                updateUI(); // Render loaded data
+            }
+        });
+
+        // --- Persistence ---
+        function saveData() {
+            localStorage.setItem('olin_tracker_courses', JSON.stringify(courses));
+        }
+
+        // NEW: Save UI State (Sidebar & Input Mode)
+        function saveUIState() {
+            const sidebar = document.getElementById('main-sidebar');
+            const batchForm = document.getElementById('batch-entry-form');
+            const uiState = {
+                sidebarOpen: sidebar.classList.contains('open'),
+                batchMode: !batchForm.classList.contains('hidden')
+            };
+            localStorage.setItem('olin_tracker_ui', JSON.stringify(uiState));
+        }
+
+        function loadData() {
+            // 1. Load Courses
+            const savedCourses = localStorage.getItem('olin_tracker_courses');
+            if (savedCourses) {
+                try {
+                    courses = JSON.parse(savedCourses);
+                } catch (e) {
+                    console.error("Failed to load save data", e);
+                    courses = [];
+                }
+            }
+
+            // 2. Load UI State
+            const savedUI = localStorage.getItem('olin_tracker_ui');
+            if (savedUI) {
+                try {
+                    const ui = JSON.parse(savedUI);
+                    
+                    // Restore Sidebar Position
+                    const sidebar = document.getElementById('main-sidebar');
+                    if (ui.sidebarOpen) {
+                        sidebar.classList.remove('closed');
+                        sidebar.classList.add('open');
+                    } else {
+                        // Ensure it is closed if that was the state
+                        sidebar.classList.remove('open');
+                        sidebar.classList.add('closed');
+                    }
+
+                    // Restore Input Mode
+                    const single = document.getElementById('single-entry-form');
+                    const batch = document.getElementById('batch-entry-form');
+                    if (ui.batchMode) {
+                        single.classList.add('hidden');
+                        batch.classList.remove('hidden');
+                    } else {
+                        single.classList.remove('hidden');
+                        batch.classList.add('hidden');
+                    }
+                } catch (e) {
+                    console.error("Failed to load UI state", e);
+                }
+            }
+        }
+
+        // --- Sidebar Logic ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            if (sidebar.classList.contains('closed')) {
+                sidebar.classList.remove('closed');
+                sidebar.classList.add('open');
+            } else {
+                sidebar.classList.remove('open');
+                sidebar.classList.add('closed');
+            }
+            saveUIState(); // Save state on toggle
+        }
+
+        // --- Grid System ---
+        function initGrid() {
+            const grid = document.getElementById('grid-layer');
+            grid.innerHTML = '';
+            for (let i = 0; i < TOTAL_CREDITS; i++) {
+                const dot = document.createElement('div');
+                dot.id = `cell-${i}`;
+                dot.className = 'grid-cell w-full h-full relative group interactive bg-slate-200';
+                
+                const fill = document.createElement('div');
+                fill.className = 'grid-cell-fill';
+                dot.appendChild(fill);
+
+                const tooltip = document.createElement('div');
+                tooltip.className = 'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-800 text-white text-[11px] font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 pointer-events-none shadow-xl';
+                tooltip.innerHTML = `Credit #${i+1}`;
+                dot.appendChild(tooltip);
+
+                grid.appendChild(dot);
+            }
+        }
+
+        // --- Requirements Dock ---
+        function initReqDock() {
+            const dock = document.getElementById('req-dock');
+            dock.innerHTML = '';
+
+            requirementRules.forEach(req => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'has-tooltip relative group cursor-pointer';
+                
+                const dot = document.createElement('div');
+                dot.id = `req-${req.id}`;
+                dot.className = 'req-dot w-4 h-4 rounded-full border-2 border-slate-300 bg-transparent';
+                
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-4 px-3 py-1.5 bg-slate-800/90 backdrop-blur-md text-white text-xs rounded-lg font-medium whitespace-nowrap opacity-0 invisible transition-all shadow-xl';
+                tooltip.innerText = req.name;
+
+                wrapper.appendChild(dot);
+                wrapper.appendChild(tooltip);
+                dock.appendChild(wrapper);
+            });
+        }
+
+        // --- Logic: Add Course ---
+        function addCreditRow() {
+            const container = document.getElementById('credit-rows');
+            const row = document.createElement('div');
+            row.className = 'flex gap-2 animate-fade-in';
+            row.innerHTML = `
+                <select class="credit-type glass-input w-2/3 rounded-xl px-2 py-2 text-xs font-medium cursor-pointer">
+                    <option value="ENGR">ENGR (Engineering)</option>
+                    <option value="MTH">MTH (Math)</option>
+                    <option value="SCI">SCI (Science)</option>
+                    <option value="AHS">AHS (Arts/Hum)</option>
+                    <option value="ENT">ENT (Entre)</option>
+                    <option value="OTHER">General</option>
+                </select>
+                <input type="number" step="0.5" class="credit-amount glass-input w-1/3 rounded-xl px-2 py-2 text-xs text-center font-bold" value="4" min="0" max="12">
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-red-500 px-1 transition-colors"><i class="fas fa-times"></i></button>
+            `;
+            container.appendChild(row);
+        }
+
+        function submitCourse() {
+            const code = document.getElementById('course-code').value.toUpperCase();
+            const name = document.getElementById('course-name').value;
+            
+            if (!code || !name) return alert("Please fill in Code and Name");
+
+            const creditRows = document.querySelectorAll('#credit-rows > div');
+            const credits = [];
+            creditRows.forEach(row => {
+                const type = row.querySelector('.credit-type').value;
+                const val = parseFloat(row.querySelector('.credit-amount').value);
+                if (!isNaN(val) && val > 0) credits.push({ type, amount: val });
+            });
+
+            if(credits.length === 0) return alert("Please add at least one credit.");
+
+            const course = { id: Date.now(), code, name, credits };
+            addCourseToState(course);
+
+            document.getElementById('course-code').value = '';
+            document.getElementById('course-name').value = '';
+            document.getElementById('credit-rows').innerHTML = '';
+            addCreditRow();
+        }
+
+        function toggleMode() {
+            const single = document.getElementById('single-entry-form');
+            const batch = document.getElementById('batch-entry-form');
+            if (single.classList.contains('hidden')) {
+                single.classList.remove('hidden');
+                batch.classList.add('hidden');
+            } else {
+                single.classList.add('hidden');
+                batch.classList.remove('hidden');
+            }
+            saveUIState(); // Save state on toggle
+        }
+
+        function submitBatch() {
+            try {
+                const raw = document.getElementById('json-input').value;
+                const json = JSON.parse(raw);
+                if (Array.isArray(json)) {
+                    json.forEach(c => {
+                        let cleanCredits = [];
+                        if(Array.isArray(c.credits)) {
+                            c.credits.forEach(cr => {
+                                let amt = parseFloat(cr.amount);
+                                if (!isNaN(amt) && amt > 0 && ['ENGR','MTH','SCI','AHS','ENT','OTHER'].includes(cr.type)) {
+                                    cleanCredits.push({type: cr.type, amount: amt});
+                                }
+                            });
+                        }
+
+                        if (cleanCredits.length > 0) {
+                            addCourseToState({
+                                id: Date.now() + Math.random(),
+                                code: c.code || "UNK",
+                                name: c.name || "Unknown",
+                                credits: cleanCredits
+                            });
+                        }
+                    });
+                    document.getElementById('json-input').value = '';
+                    toggleMode();
+                } else {
+                    alert("JSON must be an array of objects.");
+                }
+            } catch (e) {
+                alert("Invalid JSON format. Check syntax.");
+            }
+        }
+
+        function removeCourse(id) {
+            courses = courses.filter(c => c.id !== id);
+            saveData();
+            updateUI();
+        }
+
+        function addCourseToState(course) {
+            courses.push(course);
+            saveData();
+            updateUI();
+        }
+
+        // --- Core UI Updater ---
+        function updateUI() {
+            renderCourseList();
+            renderVisualGrid();
+            updateStats();
+            checkRequirements();
+        }
+
+        // --- Styling Map ---
+        const typeColors = {
+            'ENGR': { text: 'text-blue-600', bg: 'bg-blue-600', border: 'border-blue-200', lightBg: 'bg-blue-500/20' },
+            'MTH': { text: 'text-purple-600', bg: 'bg-purple-600', border: 'border-purple-200', lightBg: 'bg-purple-500/20' },
+            'SCI': { text: 'text-emerald-600', bg: 'bg-emerald-600', border: 'border-emerald-200', lightBg: 'bg-emerald-500/20' },
+            'AHS': { text: 'text-orange-600', bg: 'bg-orange-600', border: 'border-orange-200', lightBg: 'bg-orange-500/20' },
+            'ENT': { text: 'text-pink-600', bg: 'bg-pink-600', border: 'border-pink-200', lightBg: 'bg-pink-500/20' },
+            'OTHER': { text: 'text-slate-600', bg: 'bg-slate-600', border: 'border-slate-200', lightBg: 'bg-slate-500/20' }
+        };
+
+        function renderCourseList() {
+            const list = document.getElementById('course-list');
+            list.innerHTML = '';
+            courses.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'group flex items-center justify-between p-3 rounded-xl bg-white/40 hover:bg-white/70 border border-transparent hover:border-blue-200 transition-all cursor-default mb-2 shadow-sm';
+                
+                const credStr = c.credits.map(cr => {
+                    const styles = typeColors[cr.type] || typeColors['OTHER'];
+                    return `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${styles.lightBg} ${styles.text} border ${styles.border}">${cr.amount}${cr.type}</span>`
+                }).join(' ');
+
+                item.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-xs font-bold text-slate-700 font-mono">${c.code}</span>
+                        <span class="text-xs text-slate-500 truncate w-40">${c.name}</span>
+                        <div class="flex gap-1 mt-1">${credStr}</div>
+                    </div>
+                    <button onclick="removeCourse(${c.id})" class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity p-2"><i class="fas fa-trash"></i></button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function renderVisualGrid() {
+            // Reset all cells first
+            for(let i=0; i<TOTAL_CREDITS; i++) {
+                const cell = document.getElementById(`cell-${i}`);
+                if(cell) {
+                    const fill = cell.querySelector('.grid-cell-fill');
+                    fill.style.width = '0%';
+                    fill.className = 'grid-cell-fill'; // reset color classes
+                    cell.querySelector('div:last-child').innerHTML = `Credit #${i+1}`; // reset tooltip
+                    cell.classList.remove('shadow-md');
+                }
+            }
+
+            let currentCredit = 0.0; // Float tracker
+
+            // Sort logic
+            const typePriority = { 'ENGR': 1, 'MTH': 2, 'SCI': 3, 'AHS': 4, 'ENT': 5 };
+
+            courses.forEach(course => {
+                const sortedCredits = [...course.credits].sort((a,b) => (typePriority[a.type]||99) - (typePriority[b.type]||99));
+
+                sortedCredits.forEach(cred => {
+                    let amount = cred.amount;
+                    while (amount > 0) {
+                        if (currentCredit >= TOTAL_CREDITS) break; // Overflow stop visually
+
+                        const cellIndex = Math.floor(currentCredit);
+                        const cell = document.getElementById(`cell-${cellIndex}`);
+                        const fill = cell.querySelector('.grid-cell-fill');
+                        
+                        const spaceInCell = 1.0 - (currentCredit % 1); 
+                        const fillAmount = Math.min(amount, spaceInCell);
+                        
+                        const styles = typeColors[cred.type] || typeColors['OTHER'];
+                        fill.classList.add(styles.bg);
+                        
+                        const currentFillPercent = (currentCredit % 1) * 100;
+                        const addedFillPercent = fillAmount * 100;
+                        const newWidth = currentFillPercent + addedFillPercent;
+                        
+                        fill.style.width = `${newWidth}%`;
+                        cell.classList.add('shadow-md');
+
+                        const tt = cell.querySelector('div:last-child');
+                        tt.innerHTML = `<span class="font-bold text-blue-200">${course.code}</span><br>${cred.type}`;
+
+                        amount -= fillAmount;
+                        currentCredit += fillAmount;
+                    }
+                });
+            });
+        }
+
+        function updateStats() {
+            let counts = { ENGR: 0, MTH: 0, SCI: 0, AHS: 0, ENT: 0, TOTAL: 0 };
+            
+            courses.forEach(c => {
+                c.credits.forEach(cr => {
+                    const val = cr.amount;
+                    if (counts[cr.type] !== undefined) counts[cr.type] += val;
+                    counts.TOTAL += val;
+                });
+            });
+
+            const f = (n) => parseFloat(n.toFixed(1));
+
+            document.getElementById('stat-engr').innerText = f(counts.ENGR);
+            
+            const combinedMthSci = f(counts.MTH + counts.SCI);
+            document.getElementById('stat-mthsci').innerText = `${combinedMthSci}`;
+            
+            const combinedAhsEnt = f(counts.AHS + counts.ENT);
+            document.getElementById('stat-ahsent').innerText = `${combinedAhsEnt}`;
+            
+            document.getElementById('stat-total').innerText = f(counts.TOTAL);
+        }
+
+        function checkRequirements() {
+            requirementRules.forEach(req => {
+                const el = document.getElementById(`req-${req.id}`);
+                const isMet = req.check(courses);
+                
+                if (isMet) {
+                    el.classList.add('active');
+                    el.classList.remove('border-slate-300');
+                } else {
+                    el.classList.remove('active');
+                    el.classList.add('border-slate-300');
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>
