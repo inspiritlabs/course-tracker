@@ -3,9 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Olin E:C Tracker // White Glass</title>
+    <title>Olin E:C Tracker // Cloud Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // Global export for vanilla JS access
+        window.initFirebase = async (accessCode) => {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            try {
+                // 1. Authenticate anonymously first (Required for Firestore access)
+                await signInAnonymously(auth);
+                
+                // 2. Reference the specific document for this access code
+                // Path: /artifacts/{appId}/public/data/trackers/{accessCode}
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trackers', accessCode);
+
+                // 3. Set up Real-time Listener
+                onSnapshot(docRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.data();
+                        window.updateStateFromCloud(data.courses || []);
+                    } else {
+                        // If new code, initialize empty
+                        window.updateStateFromCloud([]);
+                    }
+                }, (error) => {
+                    console.error("Sync Error:", error);
+                    alert("Error syncing data. Please refresh.");
+                });
+
+                // 4. Expose save function globally
+                window.saveToCloud = async (courses) => {
+                    try {
+                        await setDoc(docRef, { 
+                            courses: courses,
+                            lastUpdated: new Date().toISOString()
+                        }, { merge: true });
+                    } catch (e) {
+                        console.error("Save failed:", e);
+                    }
+                };
+
+                return true;
+            } catch (err) {
+                console.error("Firebase Init Error:", err);
+                alert("Could not connect to cloud. Check console.");
+                return false;
+            }
+        };
+    </script>
+
     <script>
         tailwind.config = {
             theme: {
@@ -13,13 +71,7 @@
                     colors: {
                         glass: 'rgba(255, 255, 255, 0.6)',
                         glassBorder: 'rgba(255, 255, 255, 0.4)',
-                        glassHover: 'rgba(255, 255, 255, 0.8)',
-                        engr: '#3b82f6', // Blue 500
-                        mth: '#a855f7',  // Purple 500
-                        sci: '#10b981',  // Emerald 500
-                        ahs: '#f97316',  // Orange 500
-                        ent: '#ec4899',  // Pink 500
-                        other: '#64748b' // Slate 500
+                        engr: '#3b82f6', mth: '#a855f7', sci: '#10b981', ahs: '#f97316', ent: '#ec4899', other: '#64748b'
                     },
                     fontFamily: {
                         mono: ['"JetBrains Mono"', 'monospace'],
@@ -42,16 +94,14 @@
             position: relative;
         }
 
-        /* Scrollbar */
+        /* Utils */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
 
-        /* Glassmorphism */
         .glass-panel {
             background: rgba(255, 255, 255, 0.65);
             backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.6);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
         }
@@ -59,7 +109,6 @@
         .glass-drawer {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
             border-right: 1px solid rgba(255, 255, 255, 0.8);
             box-shadow: 10px 0 40px rgba(0, 0, 0, 0.1);
         }
@@ -77,26 +126,18 @@
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
         }
 
-        /* Grid Animations */
+        /* Grid */
         .grid-cell {
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
             background-color: #e2e8f0;
             border-radius: 1rem;
-            overflow: hidden; /* For partial fills */
+            overflow: hidden;
         }
-        .grid-cell:hover {
-            transform: scale(1.1);
-            z-index: 10;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-
         .grid-cell-fill {
-            height: 100%;
-            width: 0%; /* Animate width for liquid fill */
-            transition: width 0.5s ease;
+            height: 100%; width: 0%; transition: width 0.5s ease;
         }
 
-        /* Footer Dot Animations */
+        /* Dots */
         .req-dot { transition: all 0.4s ease; }
         .req-dot.active {
             background-color: #10b981;
@@ -104,13 +145,10 @@
             border-color: #10b981;
         }
         
-        /* Tooltip */
         .has-tooltip:hover .tooltip {
-            visibility: visible; opacity: 1;
-            transform: translateY(-10px) translateX(-50%);
+            visibility: visible; opacity: 1; transform: translateY(-10px) translateX(-50%);
         }
         
-        /* Layout */
         #grid-layer {
             position: absolute; inset: 0; z-index: 0; padding: 2rem;
             display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(10, 1fr); gap: 1rem;
@@ -119,17 +157,45 @@
         #ui-layer {
             position: relative; z-index: 20; height: 100%; width: 100%;
             pointer-events: none; display: flex; flex-direction: column;
+            opacity: 0; transition: opacity 0.5s ease; /* Hidden until login */
         }
+        #ui-layer.visible { opacity: 1; }
 
         .interactive { pointer-events: auto; }
 
-        /* Sidebar Transition */
         #main-sidebar { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         #main-sidebar.open { transform: translateX(0); }
         #main-sidebar.closed { transform: translateX(-100%); }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed; inset: 0; z-index: 100;
+            background: rgba(248, 250, 252, 0.8);
+            backdrop-filter: blur(20px);
+            display: flex; align-items: center; justify-content: center;
+        }
     </style>
 </head>
 <body>
+
+    <!-- LAYER 0: Login Gate -->
+    <div id="login-overlay">
+        <div class="glass-panel p-8 rounded-3xl w-96 text-center shadow-2xl flex flex-col gap-6 transform transition-all hover:scale-105">
+            <div>
+                <h1 class="text-3xl font-light tracking-widest text-slate-800 mb-1">OLIN <span class="font-bold">E:C</span></h1>
+                <p class="text-xs text-slate-500 uppercase tracking-wide">Cloud Progress Tracker</p>
+            </div>
+            
+            <div class="flex flex-col gap-2">
+                <input type="text" id="access-code" placeholder="Enter Access Code" class="glass-input text-center text-xl font-mono tracking-widest py-3 rounded-xl focus:bg-white" maxlength="10">
+                <button onclick="attemptLogin()" class="bg-slate-800 text-white py-3 rounded-xl hover:bg-blue-600 transition-colors font-medium shadow-lg mt-2">
+                    Start Tracking
+                </button>
+            </div>
+            
+            <p class="text-xs text-slate-400">Use "2005" or create your own code.</p>
+        </div>
+    </div>
 
     <!-- LAYER 1: The Massive Background Grid -->
     <div id="grid-layer">
@@ -141,12 +207,15 @@
         
         <!-- Header -->
         <header class="flex justify-between items-center px-6 py-4 glass-panel rounded-2xl interactive mt-4 mx-4 shadow-sm z-30">
-            <h1 class="text-2xl font-light tracking-widest text-slate-500">OLIN <span class="font-bold text-slate-800">E:C</span></h1>
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-light tracking-widest text-slate-500">OLIN <span class="font-bold text-slate-800">E:C</span></h1>
+                <div class="px-3 py-1 rounded-full bg-slate-100 text-xs font-mono text-slate-500 border border-slate-200" id="current-code-display">CODE: ---</div>
+            </div>
             
             <!-- Mini Stats Summary -->
             <div class="flex gap-6 text-sm font-mono text-slate-600 font-medium">
                 <span class="flex items-center gap-2" title="Target: 46"><div class="w-3 h-3 rounded-full bg-engr"></div> ENGR <span id="stat-engr">0</span>/46</span>
-                <span class="flex items-center gap-2" title="Target: 30 Combined (Min 10 Math)"><div class="w-3 h-3 rounded-full bg-mth"></div> MTH+SCI <span id="stat-mthsci">0</span>/30</span>
+                <span class="flex items-center gap-2" title="Target: 30 Combined"><div class="w-3 h-3 rounded-full bg-mth"></div> MTH+SCI <span id="stat-mthsci">0</span>/30</span>
                 <span class="flex items-center gap-2" title="Target: 28 Combined"><div class="w-3 h-3 rounded-full bg-ahs"></div> AHS+ENT <span id="stat-ahsent">0</span>/28</span>
                 <span class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-slate-300"></div> TOT <span id="stat-total">0</span>/120</span>
             </div>
@@ -230,10 +299,54 @@
 
     <!-- Templates & Logic -->
     <script>
-        // --- State Management ---
+        // --- Global State ---
         let courses = [];
         const TOTAL_CREDITS = 120;
-        
+        let currentAccessCode = null;
+
+        // --- Auth & Init Logic ---
+        async function attemptLogin() {
+            const input = document.getElementById('access-code');
+            const code = input.value.trim().toUpperCase();
+            
+            if (!code) return alert("Please enter a code");
+
+            // UI Feedback
+            const btn = document.querySelector('#login-overlay button');
+            const originalText = btn.innerText;
+            btn.innerText = "Connecting...";
+            btn.disabled = true;
+
+            // Wait for firebase to connect
+            if (typeof window.initFirebase === 'function') {
+                const success = await window.initFirebase(code);
+                if (success) {
+                    currentAccessCode = code;
+                    document.getElementById('current-code-display').innerText = `CODE: ${code}`;
+                    
+                    // Hide overlay, show UI
+                    document.getElementById('login-overlay').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('login-overlay').style.display = 'none';
+                        document.getElementById('ui-layer').classList.add('visible');
+                    }, 500);
+                } else {
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                }
+            } else {
+                alert("System initializing... try again in a moment.");
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Called by Firestore Snapshot (See module script)
+        window.updateStateFromCloud = (newCourses) => {
+            courses = newCourses;
+            updateUI(); // Redraw everything with new data
+        };
+
         // --- Logic Helpers ---
         function getCreditsOfType(course, type) {
             const c = course.credits.find(c => c.type === type);
@@ -362,74 +475,18 @@
         document.addEventListener('DOMContentLoaded', () => {
             initGrid();
             initReqDock();
-            loadData(); // Load Data AND UI State
+            addCreditRow(); // Prepare the input form
             
-            // If empty (first visit), add defaults
-            if (courses.length === 0) {
-                addCreditRow(); 
-            } else {
-                updateUI(); // Render loaded data
-            }
+            // Allow "Enter" key in login input
+            document.getElementById('access-code').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') attemptLogin();
+            });
         });
 
-        // --- Persistence ---
-        function saveData() {
-            localStorage.setItem('olin_tracker_courses', JSON.stringify(courses));
-        }
-
-        // NEW: Save UI State (Sidebar & Input Mode)
-        function saveUIState() {
-            const sidebar = document.getElementById('main-sidebar');
-            const batchForm = document.getElementById('batch-entry-form');
-            const uiState = {
-                sidebarOpen: sidebar.classList.contains('open'),
-                batchMode: !batchForm.classList.contains('hidden')
-            };
-            localStorage.setItem('olin_tracker_ui', JSON.stringify(uiState));
-        }
-
-        function loadData() {
-            // 1. Load Courses
-            const savedCourses = localStorage.getItem('olin_tracker_courses');
-            if (savedCourses) {
-                try {
-                    courses = JSON.parse(savedCourses);
-                } catch (e) {
-                    console.error("Failed to load save data", e);
-                    courses = [];
-                }
-            }
-
-            // 2. Load UI State
-            const savedUI = localStorage.getItem('olin_tracker_ui');
-            if (savedUI) {
-                try {
-                    const ui = JSON.parse(savedUI);
-                    
-                    // Restore Sidebar Position
-                    const sidebar = document.getElementById('main-sidebar');
-                    if (ui.sidebarOpen) {
-                        sidebar.classList.remove('closed');
-                        sidebar.classList.add('open');
-                    } else {
-                        // Ensure it is closed if that was the state
-                        sidebar.classList.remove('open');
-                        sidebar.classList.add('closed');
-                    }
-
-                    // Restore Input Mode
-                    const single = document.getElementById('single-entry-form');
-                    const batch = document.getElementById('batch-entry-form');
-                    if (ui.batchMode) {
-                        single.classList.add('hidden');
-                        batch.classList.remove('hidden');
-                    } else {
-                        single.classList.remove('hidden');
-                        batch.classList.add('hidden');
-                    }
-                } catch (e) {
-                    console.error("Failed to load UI state", e);
-                }
+        // --- Persistence (Now Cloud) ---
+        function saveToCloud() {
+            if (window.saveToCloud) {
+                window.saveToCloud(courses);
             }
         }
 
@@ -443,7 +500,6 @@
                 sidebar.classList.remove('open');
                 sidebar.classList.add('closed');
             }
-            saveUIState(); // Save state on toggle
         }
 
         // --- Grid System ---
@@ -546,7 +602,6 @@
                 single.classList.add('hidden');
                 batch.classList.remove('hidden');
             }
-            saveUIState(); // Save state on toggle
         }
 
         function submitBatch() {
@@ -586,14 +641,14 @@
 
         function removeCourse(id) {
             courses = courses.filter(c => c.id !== id);
-            saveData();
-            updateUI();
+            saveToCloud(); // Save change
+            updateUI(); // Optimistic update (snapshot will confirm)
         }
 
         function addCourseToState(course) {
             courses.push(course);
-            saveData();
-            updateUI();
+            saveToCloud(); // Save change
+            updateUI(); // Optimistic update
         }
 
         // --- Core UI Updater ---
